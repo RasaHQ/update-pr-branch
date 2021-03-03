@@ -10,7 +10,8 @@ const getOctokit = () => {
 export const getOpenPRs = async () => {
   const octokit = getOctokit();
   const repo = github.context.repo;
-  const baseBranch = core.getInput('base');
+  const components = github.context.ref.split('/')
+  const baseBranch = components[components.length - 1]
 
   const { data } = await octokit.pulls.list({
     ...repo,
@@ -32,6 +33,63 @@ export const updatePRBranch = async (pullNumber) => {
 
   return data;
 };
+
+export const deleteExistingComments = async (marker, pullNumber) => {
+  const octokit = getOctokit();
+  const repo = github.context.repo;
+  const comments = await getComments(pullNumber, octokit);
+
+  for (const comment of comments) {
+    if (comment.body.includes(marker)) {
+      console.log('Deleting existing comment with id: ' + comment.id)
+      octokit.issues.deleteComment({
+        ...repo,
+        comment_id: comment.id,
+      });
+    }
+  }
+}
+
+
+export const replacePreviousComment = async (marker, pullNumber, body) => {
+  const octokit = getOctokit();
+  const repo = github.context.repo;
+  const comments = await getComments(pullNumber, octokit);
+
+  for (const comment of comments) {
+    if (comment.body.includes(marker)) {
+      console.log('Found existing comment, will update it. comment id: ' + comment.id);
+      octokit.issues.updateComment({
+        ...repo,
+        comment_id: comment.id,
+        body: markedBody(body, marker),
+      });
+      return;
+    }
+  }
+  console.log('No existing comment found - creating a new one.');
+  await octokit.issues.createComment({
+    ...repo,
+    issue_number: pullNumber,
+    body: markedBody(body, marker),
+  });
+}
+
+function markedBody(body, marker) {
+  return body + '\n\n' + marker;
+}
+
+/**
+ * get pr comments
+ */
+export const getComments = async (pullNumber, octokit) => {
+  const repo = github.context.repo;
+  const opts = octokit.issues.listComments.endpoint.merge({
+    ...repo,
+    issue_number: pullNumber
+  });
+  return await octokit.paginate(opts);
+}
 
 /**
  * get PR metaData
@@ -108,7 +166,6 @@ export const areAllChecksPassed = async (sha) => {
 export const getApprovalStatus = async (pullNumber) => {
   const octokit = getOctokit();
   const repo = github.context.repo;
-  const requiredApprovalCount = core.getInput('required_approval_count');
 
   const { data: reviewsData } = await octokit.pulls.listReviews({
     ...repo,
@@ -126,14 +183,13 @@ export const getApprovalStatus = async (pullNumber) => {
   return {
     changesRequestedCount,
     approvalCount,
-    requiredApprovalCount,
   };
 };
 
 /**
  * find a applicable PR to update
  */
-export const getAutoUpdateCandidate = async (openPRs) => {
+export const getAutoUpdateCandidate = async function*(openPRs) {
   if (!openPRs) return null;
 
   const requiredApprovalCount = core.getInput('required_approval_count');
@@ -153,7 +209,6 @@ export const getAutoUpdateCandidate = async (openPRs) => {
     const {
       changesRequestedCount,
       approvalCount,
-      requiredApprovalCount,
     } = await getApprovalStatus(pullNumber);
     if (changesRequestedCount || approvalCount < requiredApprovalCount) {
       const reason = `approvalsCount: ${approvalCount}, requiredApprovalCount: ${requiredApprovalCount}, changesRequestedReviews: ${changesRequestedCount}`;
@@ -191,8 +246,7 @@ export const getAutoUpdateCandidate = async (openPRs) => {
       continue;
     }
 
-    return pr;
+    yield pr;
   }
-
-  return null;
 };
+

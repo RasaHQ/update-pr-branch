@@ -34,16 +34,6 @@ The [personal access token](https://github.com/settings/tokens/).
 
 Need to note, you can't use `GITHUB_TOKEN` because of [this limitation](https://docs.github.com/en/actions/reference/events-that-trigger-workflows#triggering-new-workflows-using-a-personal-access-token)
 
-### `base`
-
-**Required**
-
-Default: `master`
-
-The base branch that the PR will use to fetch open PRs, for example, `main`, `master` or `dev`.
-
-The action will only check PRs that use the `base` as the base branch.
-
 ### `required_approval_count`
 
 **Required**
@@ -76,7 +66,6 @@ jobs:
         uses: adRise/update-pr-branch@VERSION_YOU_WANT_TO_USE
         with:
           token: ${{ secrets.ACTION_USER_TOKEN }}
-          base: 'master'
           required_approval_count: 2
 ```
 

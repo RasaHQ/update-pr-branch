@@ -8,19 +8,23 @@ jest.mock('@actions/github');
 jest.mock('./util');
 
 const token = 'FAKE_TOKEN';
-const base = 'FAKE_BASE';
 const requiredApprovalCount = 2;
 const pullNumber = 1111;
 
 const fakeEnv = {
   token,
-  base,
   required_approval_count: requiredApprovalCount,
 };
 
 const oldEnv = process.env;
-const mockedRepo = { repo: { owner: 'adRise', repo: 'actions' } };
+const mockedRepo = { repo: { owner: 'adRise', repo: 'actions' }, ref: 'refs/heads/FAKEBASE'};
 const oldContext = github.context;
+
+async function toArray(asyncIterator){
+    const arr=[];
+    for await(const i of asyncIterator) arr.push(i);
+    return arr;
+}
 
 beforeEach(() => {
   process.env = { ...oldEnv, ...fakeEnv };
@@ -105,7 +109,7 @@ describe('getOpenPRs()', () => {
     expect(github.getOctokit).toHaveBeenCalled();
     expect(mockedMethod).toHaveBeenCalledWith({
       ...mockedRepo.repo,
-      base,
+      base: "FAKEBASE",
       state: 'open',
     });
 
@@ -237,7 +241,6 @@ describe('getApprovalStatus()', () => {
     expect(result).toEqual({
       approvalCount: 1,
       changesRequestedCount: 1,
-      requiredApprovalCount: requiredApprovalCount,
     });
   });
 });
@@ -253,17 +256,17 @@ describe('getAutoUpdateCanidate()', () => {
   });
 
   test('return null if openPRs is undefined', async () => {
-    const res = await gitLib.getAutoUpdateCandidate();
+    const res = await toArray(gitLib.getAutoUpdateCandidate());
     expect(utils.log).toHaveBeenCalledTimes(0);
-    expect(res).toBe(null);
+    expect(res).toEqual([]);
   });
 
   test('return null if there is no open PR', async () => {
-    const res = await gitLib.getAutoUpdateCandidate([]);
+    const res = await toArray(gitLib.getAutoUpdateCandidate([]));
     expect(utils.log).toHaveBeenCalledWith(
       'Count of auto-merge enabled PRs: 0',
     );
-    expect(res).toBe(null);
+    expect(res).toEqual([]);
   });
 
   test('return null if there is no auto-merge enabled PR', async () => {
@@ -275,11 +278,11 @@ describe('getAutoUpdateCanidate()', () => {
       });
     });
 
-    const res = await gitLib.getAutoUpdateCandidate(list);
+    const res = await toArray(gitLib.getAutoUpdateCandidate(list));
     expect(utils.log).toHaveBeenCalledWith(
       'Count of auto-merge enabled PRs: 0',
     );
-    expect(res).toBe(null);
+    expect(res).toEqual([]);
   });
 
   test('PR with request-for-change review will not be selected', async () => {
@@ -291,7 +294,7 @@ describe('getAutoUpdateCanidate()', () => {
       pulls: { listReviews: mockedListReviews, get: mockedGet },
     });
 
-    const res = await gitLib.getAutoUpdateCandidate(prList);
+    const res = await toArray(gitLib.getAutoUpdateCandidate(prList));
     expect(mockedListReviews).toHaveBeenCalled();
     expect(utils.log).toHaveBeenCalledTimes(2);
     expect(utils.printFailReason).toHaveBeenCalledTimes(1);
@@ -300,7 +303,7 @@ describe('getAutoUpdateCanidate()', () => {
       `approvalsCount: 1, requiredApprovalCount: ${requiredApprovalCount}, changesRequestedReviews: 1`,
     );
     expect(mockedGet).toHaveBeenCalledTimes(0);
-    expect(res).toBe(null);
+    expect(res).toEqual([]);
   });
 
   test('PR does not have requiredApprovalCount wont be selected', async () => {
@@ -317,7 +320,7 @@ describe('getAutoUpdateCanidate()', () => {
       pulls: { listReviews: mockedListReviews, get: mockedGet },
     });
 
-    const res = await gitLib.getAutoUpdateCandidate(prList);
+    const res = await toArray(gitLib.getAutoUpdateCandidate(prList));
     expect(mockedListReviews).toHaveBeenCalled();
     expect(utils.log).toHaveBeenCalledTimes(2);
     expect(utils.printFailReason).toHaveBeenCalledTimes(1);
@@ -326,7 +329,7 @@ describe('getAutoUpdateCanidate()', () => {
       `approvalsCount: 1, requiredApprovalCount: ${requiredApprovalCount}, changesRequestedReviews: 0`,
     );
     expect(mockedGet).toHaveBeenCalledTimes(0);
-    expect(res).toBe(null);
+    expect(res).toEqual([]);
   });
 
   test('PR with mergeable !== true will not be selected', async () => {
@@ -354,12 +357,12 @@ describe('getAutoUpdateCanidate()', () => {
       pulls: { listReviews: mockedListReviews, get: mockedGet },
     });
 
-    const res = await gitLib.getAutoUpdateCandidate(prList);
+    const res = await toArray(gitLib.getAutoUpdateCandidate(prList));
     expect(utils.printFailReason).toHaveBeenCalledWith(
       prList[0].number,
       "The 'mergeable' value is: null",
     );
-    expect(res).toBe(null);
+    expect(res).toEqual([]);
   });
 
   test('PR with mergeable_state === unknown will not be selected', async () => {
@@ -388,12 +391,12 @@ describe('getAutoUpdateCanidate()', () => {
       pulls: { listReviews: mockedListReviews, get: mockedGet },
     });
 
-    const res = await gitLib.getAutoUpdateCandidate(prList);
+    const res = await toArray(gitLib.getAutoUpdateCandidate(prList));
     expect(utils.printFailReason).toHaveBeenCalledWith(
       prList[0].number,
       "The 'mergeable_state' value is: 'clean'. The branch is not 'behind' the base branch",
     );
-    expect(res).toBe(null);
+    expect(res).toEqual([]);
   });
 
   test('PR with failed checks wonnt be selected', async () => {
@@ -436,12 +439,12 @@ describe('getAutoUpdateCanidate()', () => {
       checks: { listForRef: mockedListForRef },
     });
 
-    const res = await gitLib.getAutoUpdateCandidate(prList);
+    const res = await toArray(gitLib.getAutoUpdateCandidate(prList));
     expect(utils.printFailReason).toHaveBeenCalledWith(
       prList[0].number,
       'The PR has failed or ongoing check(s)',
     );
-    expect(res).toBe(null);
+    expect(res).toEqual([]);
   });
   test('Should return the first PR if it is all good', async () => {
     // has 2 approvals, no request for change review
@@ -483,8 +486,8 @@ describe('getAutoUpdateCanidate()', () => {
       checks: { listForRef: mockedListForRef },
     });
 
-    const res = await gitLib.getAutoUpdateCandidate(prList);
-    expect(res).toEqual(prList[0]);
+    const res = await toArray(gitLib.getAutoUpdateCandidate(prList));
+    expect(res).toEqual(prList);
   });
 
   // this test is to mock the case: two auto-merge enabled PRs, but the first one has CHANGES_REQUESTED review,
@@ -547,7 +550,7 @@ describe('getAutoUpdateCanidate()', () => {
       checks: { listForRef: mockedListForRef },
     });
 
-    const res = await gitLib.getAutoUpdateCandidate(prList);
-    expect(res).toEqual(prList[1]);
+    const res = await toArray(gitLib.getAutoUpdateCandidate(prList));
+    expect(res).toEqual([prList[1]]);
   });
 });
