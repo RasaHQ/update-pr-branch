@@ -223,7 +223,7 @@ export const getAutoUpdateCandidate = async function*(openPRs) {
      */
     const { mergeable, mergeable_state } = await getMergeableStatus(pullNumber);
 
-    if (!mergeable || mergeable_state !== 'behind') {
+    if (!mergeable || (mergeable_state !== 'behind' && mergeable_state !== 'unstable')) {
       let failReason;
       if (!mergeable) {
         failReason = `The 'mergeable' value is: ${mergeable}`;
